@@ -1,8 +1,107 @@
 import { Product, FilterOptions } from './types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-// Mock data for development when API is not available
+export async function getProducts(options: FilterOptions = {}): Promise<Product[]> {
+  try {
+    const params = new URLSearchParams();
+    if (options.category) params.append('category', options.category);
+    if (options.tags?.length) params.append('tags', options.tags.join(','));
+    if (options.search) params.append('search', options.search);
+    if (options.sort) params.append('sort', options.sort);
+    if (options.limit) params.append('limit', options.limit.toString());
+    if (options.page) params.append('page', options.page.toString());
+
+    const res = await fetch(`${API_URL}/api/products?${params}`);
+    if (!res.ok) throw new Error('Failed to fetch products');
+    return await res.json();
+  } catch (error) {
+    console.warn('API not available, using mock data:', error);
+    return mockProducts;
+  }
+}
+
+export async function getProduct(id: string): Promise<Product> {
+  try {
+    const res = await fetch(`${API_URL}/api/products/${id}`);
+    if (!res.ok) throw new Error('Product not found');
+    return await res.json();
+  } catch (error) {
+    console.warn('API not available, using mock data:', error);
+    return mockProducts.find(p => p._id === id) || mockProducts[0];
+  }
+}
+
+export async function getTrendingProducts(): Promise<Product[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/products/trending`);
+    if (!res.ok) throw new Error('Failed to fetch trending products');
+    return await res.json();
+  } catch (error) {
+    console.warn('API not available, using mock data:', error);
+    return mockProducts.slice(0, 6);
+  }
+}
+
+export async function searchProducts(query: string): Promise<Product[]> {
+  try {
+    const params = new URLSearchParams();
+    params.append('search', query);
+    
+    const res = await fetch(`${API_URL}/api/products?${params}`);
+    if (!res.ok) throw new Error('Failed to search products');
+    return await res.json();
+  } catch (error) {
+    console.warn('Search API not available, using mock data:', error);
+    return mockProducts.filter(product => 
+      product.name.toLowerCase().includes(query.toLowerCase()) ||
+      product.description.toLowerCase().includes(query.toLowerCase())
+    );
+  }
+}
+
+export async function getProductsByCategory(category: string): Promise<Product[]> {
+  return getProducts({ category, limit: 50 });
+}
+
+export async function compareProducts(ids: string[]): Promise<Product[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/products/compare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) throw new Error('Failed to compare');
+    const data = await res.json();
+    return data.products;
+  } catch (error) {
+    console.warn('API not available, using mock data:', error);
+    return ids.map(id => mockProducts.find(p => p._id === id)).filter(Boolean) as Product[];
+  }
+}
+
+// Auth functions
+export async function registerUser(email: string, password: string) {
+  const res = await fetch(`${API_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, role: 'user' }),
+  });
+  if (!res.ok) throw new Error('Registration failed');
+  return await res.json();
+}
+
+export async function loginUser(email: string, password: string) {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new Error('Login failed');
+  return await res.json();
+}
+
+// Mock data remains for fallback
 const mockProducts: Product[] = [
   {
     _id: '1',
@@ -65,95 +164,3 @@ const mockProducts: Product[] = [
     seoMetadata: { title: 'Claude - AI Assistant', description: 'Anthropic AI assistant' }
   }
 ];
-
-export async function fetchProducts(options: FilterOptions = {}): Promise<Product[]> {
-  try {
-    const params = new URLSearchParams();
-    if (options.category) params.append('category', options.category);
-    if (options.tags) params.append('tags', options.tags.join(','));
-    if (options.sort) params.append('sort', options.sort);
-    if (options.search) params.append('search', options.search);
-    params.append('page', String(options.page || 1));
-    params.append('limit', String(options.limit || 20));
-
-    const res = await fetch(`${API_URL}/api/products?${params}`);
-    if (!res.ok) throw new Error('Failed to fetch products');
-
-    const data = await res.json();
-    // Ensure we always return an array
-    if (!Array.isArray(data)) {
-      console.warn('API returned non-array data, using mock data');
-      return mockProducts;
-    }
-    return data;
-  } catch (error) {
-    console.warn('API not available, using mock data:', error);
-    // Filter mock data based on options
-    let filtered = [...mockProducts];
-    if (options.category) {
-      filtered = filtered.filter(p => p.categories.includes(options.category!));
-    }
-    if (options.search) {
-      const searchLower = options.search.toLowerCase();
-      filtered = filtered.filter(p =>
-        p.name.toLowerCase().includes(searchLower) ||
-        p.description.toLowerCase().includes(searchLower)
-      );
-    }
-    return filtered;
-  }
-}
-
-export async function fetchProduct(id: string): Promise<Product> {
-  const res = await fetch(`${API_URL}/api/products/${id}`);
-  if (!res.ok) throw new Error('Product not found');
-  return res.json();
-}
-
-export async function fetchTrending(category?: string, limit = 5): Promise<Product[]> {
-  try {
-    const params = new URLSearchParams({ limit: String(limit) });
-    if (category) params.append('category', category);
-    const res = await fetch(`${API_URL}/api/products/trending?${params}`);
-
-    if (!res.ok) {
-      throw new Error('Failed to fetch trending');
-    }
-
-    const data = await res.json();
-    // Ensure we always return an array
-    if (!Array.isArray(data)) {
-      console.warn('API returned non-array data, using mock data');
-      return mockProducts.slice(0, limit);
-    }
-    return data;
-  } catch (error) {
-    console.warn('API not available, using mock data:', error);
-    // Return mock data filtered by category if specified
-    let filtered = [...mockProducts];
-    if (category) {
-      filtered = filtered.filter(p => p.categories.includes(category));
-    }
-    // Sort by popularity and limit
-    return filtered
-      .sort((a, b) => b.popularity - a.popularity)
-      .slice(0, limit);
-  }
-}
-
-export async function compareProducts(ids: string[]): Promise<Product[]> {
-  const res = await fetch(`${API_URL}/api/products/compare`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids }),
-  });
-  if (!res.ok) throw new Error('Failed to compare');
-  return (await res.json()).products;
-}
-
-export async function searchSuggestions(query: string): Promise<string[]> {
-  const res = await fetch(`${API_URL}/api/products?search=${encodeURIComponent(query)}`);
-  if (!res.ok) throw new Error('Failed to fetch suggestions');
-  const products = await res.json();
-  return Array.from(new Set(products.flatMap((p: Product) => [p.name, ...p.tags, ...p.categories])));
-}

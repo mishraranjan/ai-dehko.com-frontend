@@ -2,7 +2,7 @@
 import { Product } from '../lib/types';
 import { ProductCard } from './ProductCard';
 import { useEffect, useState } from 'react';
-import { fetchTrending } from '@/lib/api';
+import { getTrendingProducts } from '@/lib/api';
 
 interface CategoryWidgetProps { category?: string; limit?: number; }
 
@@ -14,7 +14,7 @@ export function CategoryWidget({ category, limit = 5 }: CategoryWidgetProps) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetchTrending(category, limit)
+    getTrendingProducts()
       .then(setProducts)
       .catch(err => {
         console.error('Failed to fetch trending products:', err);
